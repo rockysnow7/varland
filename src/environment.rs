@@ -2,7 +2,7 @@ mod functions;
 
 use crate::utils::{coords_to_string, Set};
 use functions::{builtin_functions, Function};
-use std::{collections::HashMap, fmt::Display, ops::BitOr};
+use std::{collections::HashMap, error::Error, fmt::Display, ops::BitOr};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueType {
@@ -112,12 +112,12 @@ pub enum Value {
 impl Value {
     pub fn type_(&self) -> ValueType {
         match self {
-            Value::Null => ValueType::Null,
-            Value::Bool(_) => ValueType::Bool,
-            Value::Int(_) => ValueType::Int,
-            Value::Float(_) => ValueType::Float,
-            Value::String(_) => ValueType::String,
-            Value::List(values) => {
+            Self::Null => ValueType::Null,
+            Self::Bool(_) => ValueType::Bool,
+            Self::Int(_) => ValueType::Int,
+            Self::Float(_) => ValueType::Float,
+            Self::String(_) => ValueType::String,
+            Self::List(values) => {
                 if values.is_empty() {
                     return ValueType::List(None);
                 }
@@ -133,9 +133,47 @@ impl Value {
                     ValueType::list_of(ValueType::Union(inner_types))
                 }
             },
-            Value::FunctionCall { .. } => unreachable!("FunctionCall should be evaluated to a concrete value first"),
-            Value::CloneCell { .. } => unreachable!("CloneCell should be evaluated to a concrete value first"),
-            Value::CloneCellRange { .. } => unreachable!("CloneCellRange should be evaluated to a concrete value first"),
+            Self::FunctionCall { .. } => unreachable!("FunctionCall should be evaluated to a concrete value first"),
+            Self::CloneCell { .. } => unreachable!("CloneCell should be evaluated to a concrete value first"),
+            Self::CloneCellRange { .. } => unreachable!("CloneCellRange should be evaluated to a concrete value first"),
+        }
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Null => write!(f, ""),
+            Self::Bool(bool) => write!(f, "{bool}"),
+            Self::Int(int) => write!(f, "{int}"),
+            Self::Float(float) => write!(f, "{float}"),
+            Self::String(string) => write!(f, "{string}"),
+            Self::List(values) => {
+                let values_str = values
+                    .iter()
+                    .map(|value| value.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "[{values_str}]")
+            }
+            Self::FunctionCall {
+                function_name,
+                arguments,
+            } => {
+                let arguments_str = arguments
+                    .iter()
+                    .map(|argument| argument.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "{function_name}({arguments_str})")
+            },
+            Self::CloneCell { col, row } => write!(f, "{}", coords_to_string(*col, *row)),
+            Self::CloneCellRange { start_col, start_row, end_col, end_row } => write!(
+                f,
+                "{}:{}",
+                coords_to_string(*start_col, *start_row),
+                coords_to_string(*end_col, *end_row),
+            ),
         }
     }
 }
@@ -267,6 +305,33 @@ impl Environment {
                 self.evaluate_cell(row, column);
             }
         }
+    }
+
+    pub fn to_csv(&mut self, path_to_file: &str) -> Result<(), Box<dyn Error>> {
+        self.evaluate_all();
+
+        let mut wtr = csv::Writer::from_path(path_to_file)?;
+        if self.evaluated_table.is_empty() {
+            wtr.flush()?;
+            return Ok(());
+        }
+
+        let max_len = self.evaluated_table.iter().map(|row| row.len()).max().unwrap();
+        for row in 0..max_len {
+            let mut row_values = Vec::new();
+            for col in 0..self.evaluated_table.len() {
+                let value = self.get_value_evaluated(col, row);
+                let value_str = match value {
+                    Ok(value) => value.to_string(),
+                    Err(error) => error,
+                };
+                row_values.push(value_str);
+            }
+            wtr.write_record(&row_values)?;
+        }
+        wtr.flush()?;
+
+        Ok(())
     }
 }
 
