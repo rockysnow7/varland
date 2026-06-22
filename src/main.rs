@@ -62,6 +62,8 @@ async fn main() {
         .route("/set-raw-value", post(set_raw_value));
     let app = Router::new()
         .nest("/api", api_router)
+        .fallback_service(ServeDir::new("client"))
+        .layer(CorsLayer::permissive())
         .with_state(environment);
 
     let listener = TcpListener::bind("127.0.0.1:3000").await.unwrap();
