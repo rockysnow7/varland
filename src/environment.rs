@@ -1,7 +1,8 @@
 mod functions;
 
-use crate::utils::{coords_to_string, Set};
-use functions::{builtin_functions, Function};
+use crate::utils::{Set, coords_to_string};
+use functions::{Function, builtin_functions};
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt::Display, ops::BitOr};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,14 +22,13 @@ impl ValueType {
         if self == other {
             return true;
         }
-        // if let Self::Union(types) = other {
-        //     return types.iter().any(|t| self.is_subset_of(t));
-        // }
 
         match (self, other) {
             (Self::Union(types), Self::Union(other_types)) => types.is_subset_of(other_types),
             (_, Self::Union(other_types)) => other_types.iter().any(|t| self.is_subset_of(t)),
-            (Self::List(Some(inner)), Self::List(Some(other_inner))) => inner.is_subset_of(other_inner),
+            (Self::List(Some(inner)), Self::List(Some(other_inner))) => {
+                inner.is_subset_of(other_inner)
+            }
             (Self::List(None), Self::List(_)) => true,
             (Self::List(Some(_)), Self::List(None)) => false,
             _ => false,
@@ -51,8 +51,16 @@ impl ValueType {
             return self.clone();
         }
 
-        let self_types = if let Self::Union(types) = self { types.clone() } else { Set::from_iter([self.clone()]) };
-        let other_types = if let Self::Union(types) = other { types.clone() } else { Set::from_iter([other.clone()]) };
+        let self_types = if let Self::Union(types) = self {
+            types.clone()
+        } else {
+            Set::from_iter([self.clone()])
+        };
+        let other_types = if let Self::Union(types) = other {
+            types.clone()
+        } else {
+            Set::from_iter([other.clone()])
+        };
         Self::Union(self_types | other_types)
     }
 }
@@ -79,13 +87,17 @@ impl Display for ValueType {
             Self::Union(types) => write!(
                 f,
                 "{}",
-                types.iter().map(|t| t.to_string()).collect::<Vec<String>>().join(" | "),
-            )
+                types
+                    .iter()
+                    .map(|t| t.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" | "),
+            ),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
     Null,
     Bool(bool),
@@ -132,10 +144,16 @@ impl Value {
                 } else {
                     ValueType::list_of(ValueType::Union(inner_types))
                 }
-            },
-            Self::FunctionCall { .. } => unreachable!("FunctionCall should be evaluated to a concrete value first"),
-            Self::CloneCell { .. } => unreachable!("CloneCell should be evaluated to a concrete value first"),
-            Self::CloneCellRange { .. } => unreachable!("CloneCellRange should be evaluated to a concrete value first"),
+            }
+            Self::FunctionCall { .. } => {
+                unreachable!("FunctionCall should be evaluated to a concrete value first")
+            }
+            Self::CloneCell { .. } => {
+                unreachable!("CloneCell should be evaluated to a concrete value first")
+            }
+            Self::CloneCellRange { .. } => {
+                unreachable!("CloneCellRange should be evaluated to a concrete value first")
+            }
         }
     }
 }
@@ -166,9 +184,14 @@ impl Display for Value {
                     .collect::<Vec<String>>()
                     .join(", ");
                 write!(f, "{function_name}({arguments_str})")
-            },
+            }
             Self::CloneCell { col, row } => write!(f, "{}", coords_to_string(*col, *row)),
-            Self::CloneCellRange { start_col, start_row, end_col, end_row } => write!(
+            Self::CloneCellRange {
+                start_col,
+                start_row,
+                end_col,
+                end_row,
+            } => write!(
                 f,
                 "{}:{}",
                 coords_to_string(*start_col, *start_row),
@@ -233,7 +256,13 @@ impl Environment {
         self.evaluated_table[col][row] = value;
     }
 
-    fn evaluate_function_call(&self, function_name: &str, arguments: &[Value], source_col: usize, source_row: usize) -> Result<Value, String> {
+    fn evaluate_function_call(
+        &self,
+        function_name: &str,
+        arguments: &[Value],
+        source_col: usize,
+        source_row: usize,
+    ) -> Result<Value, String> {
         let arguments_evaluated = arguments
             .iter()
             .map(|arg| self.evaluate_raw_value(arg, source_col, source_row))
@@ -242,7 +271,12 @@ impl Environment {
         function.call(&arguments_evaluated)
     }
 
-    fn evaluate_raw_value(&self, raw_value: &Value, source_col: usize, source_row: usize) -> Result<Value, String> {
+    fn evaluate_raw_value(
+        &self,
+        raw_value: &Value,
+        source_col: usize,
+        source_row: usize,
+    ) -> Result<Value, String> {
         match raw_value {
             Value::Null => Ok(Value::Null),
             Value::Int(value) => Ok(Value::Int(*value)),
@@ -255,19 +289,37 @@ impl Environment {
                     .map(|v| self.evaluate_raw_value(v, source_col, source_row))
                     .collect::<Result<Vec<Value>, String>>()?;
                 Ok(Value::List(values))
-            },
-            Value::FunctionCall { function_name, arguments } => self.evaluate_function_call(function_name, arguments, source_col, source_row),
-            Value::CloneCell { col, row } => if *col > source_col || *col == source_col && *row >= source_row {
-                Err(format!("Cannot clone cell {} from source cell {} as the former comes after the latter", coords_to_string(*col, *row), coords_to_string(source_col, source_row)))
-            } else {
-                self.get_value_evaluated(*col, *row)
-            },
-            Value::CloneCellRange { start_col, start_row, end_col, end_row } => {
+            }
+            Value::FunctionCall {
+                function_name,
+                arguments,
+            } => self.evaluate_function_call(function_name, arguments, source_col, source_row),
+            Value::CloneCell { col, row } => {
+                if *col > source_col || *col == source_col && *row >= source_row {
+                    Err(format!(
+                        "Cannot clone cell {} from source cell {} as the former comes after the latter",
+                        coords_to_string(*col, *row),
+                        coords_to_string(source_col, source_row)
+                    ))
+                } else {
+                    self.get_value_evaluated(*col, *row)
+                }
+            }
+            Value::CloneCellRange {
+                start_col,
+                start_row,
+                end_col,
+                end_row,
+            } => {
                 if *start_col > *end_col {
-                    return Err(format!("Start column {start_col} is greater than end column {end_col}"));
+                    return Err(format!(
+                        "Start column {start_col} is greater than end column {end_col}"
+                    ));
                 }
                 if *start_row > *end_row {
-                    return Err(format!("Start row {start_row} is greater than end row {end_row}"));
+                    return Err(format!(
+                        "Start row {start_row} is greater than end row {end_row}"
+                    ));
                 }
                 if *end_col > source_col || *end_col == source_col && *end_row >= source_row {
                     return Err(format!(
@@ -307,6 +359,14 @@ impl Environment {
         }
     }
 
+    pub fn get_raw_state(&self) -> Vec<Vec<Value>> {
+        self.raw_table.clone()
+    }
+
+    pub fn get_evaluated_state(&self) -> Vec<Vec<Result<Value, String>>> {
+        self.evaluated_table.clone()
+    }
+
     pub fn to_csv(&mut self, path_to_file: &str) -> Result<(), Box<dyn Error>> {
         self.evaluate_all();
 
@@ -316,7 +376,12 @@ impl Environment {
             return Ok(());
         }
 
-        let max_len = self.evaluated_table.iter().map(|row| row.len()).max().unwrap();
+        let max_len = self
+            .evaluated_table
+            .iter()
+            .map(|row| row.len())
+            .max()
+            .unwrap();
         for row in 0..max_len {
             let mut row_values = Vec::new();
             for col in 0..self.evaluated_table.len() {
@@ -343,8 +408,14 @@ mod tests {
     fn test_value_type_is_subset_of() {
         assert!(ValueType::Int.is_subset_of(&ValueType::Int));
         assert!(ValueType::Int.is_subset_of(&(ValueType::Int | ValueType::Float)));
-        assert!(ValueType::list_of(ValueType::Int | ValueType::Float)
-            .is_subset_of(&ValueType::list_of(ValueType::Int | ValueType::Float | ValueType::String)));
-        assert!((ValueType::Int | ValueType::Float).is_subset_of(&(ValueType::Int | ValueType::Float | ValueType::String)));
+        assert!(
+            ValueType::list_of(ValueType::Int | ValueType::Float).is_subset_of(
+                &ValueType::list_of(ValueType::Int | ValueType::Float | ValueType::String)
+            )
+        );
+        assert!(
+            (ValueType::Int | ValueType::Float)
+                .is_subset_of(&(ValueType::Int | ValueType::Float | ValueType::String))
+        );
     }
 }

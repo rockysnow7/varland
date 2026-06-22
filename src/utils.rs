@@ -2,8 +2,14 @@ use std::ops::BitOr;
 
 /// Parses a string of the form "A0"/"AA7"/etc. into a tuple of (column, row).
 pub fn parse_coords(coords: &str) -> Result<(usize, usize), String> {
-    let column_str = coords.chars().take_while(|c| c.is_ascii_alphabetic()).collect::<String>();
-    let row_str = coords.chars().skip_while(|c| c.is_ascii_alphabetic()).collect::<String>();
+    let column_str = coords
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect::<String>();
+    let row_str = coords
+        .chars()
+        .skip_while(|c| c.is_ascii_alphabetic())
+        .collect::<String>();
     if column_str.is_empty() || row_str.is_empty() {
         return Err(format!("Invalid coordinates: {coords}"));
     }
@@ -12,7 +18,9 @@ pub fn parse_coords(coords: &str) -> Result<(usize, usize), String> {
         .chars()
         .fold(0usize, |col, c| col * 26 + (c as usize - 'A' as usize + 1))
         - 1;
-    let row = row_str.parse::<usize>().map_err(|e| format!("Invalid row: {row_str}: {e}"))?;
+    let row = row_str
+        .parse::<usize>()
+        .map_err(|e| format!("Invalid row: {row_str}: {e}"))?;
 
     Ok((column, row))
 }
@@ -71,7 +79,9 @@ impl<T: Eq + Clone> Set<T> {
 
 impl<T: Eq + Clone> FromIterator<T> for Set<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        Self { inner: iter.into_iter().collect() }
+        Self {
+            inner: iter.into_iter().collect(),
+        }
     }
 }
 
@@ -98,11 +108,7 @@ mod tests {
 
     #[test]
     fn test_parse_coords_and_coords_to_string() {
-        let pairs = vec![
-            ("A0", (0, 0)),
-            ("AA7", (26, 7)),
-            ("AB1", (27, 1)),
-        ];
+        let pairs = vec![("A0", (0, 0)), ("AA7", (26, 7)), ("AB1", (27, 1))];
 
         for (coords, expected) in pairs {
             assert_eq!(parse_coords(coords).unwrap(), expected);
