@@ -1,6 +1,6 @@
 use std::ops::BitOr;
 
-/// Parses a string of the form "A0"/"AA7"/etc. into a tuple of (column, row).
+/// Parses a string of the form "A1"/"AA7"/etc. into a tuple of (column, row).
 pub fn parse_coords(coords: &str) -> Result<(usize, usize), String> {
     let column_str = coords
         .chars()
@@ -16,11 +16,12 @@ pub fn parse_coords(coords: &str) -> Result<(usize, usize), String> {
 
     let column = column_str
         .chars()
-        .fold(0usize, |col, c| col * 26 + (c as usize - 'A' as usize + 1))
+        .fold(0usize, |col, c| col * 26 + (c.to_ascii_uppercase() as usize - 'A' as usize + 1))
         - 1;
     let row = row_str
         .parse::<usize>()
-        .map_err(|e| format!("Invalid row: {row_str}: {e}"))?;
+        .map_err(|e| format!("Invalid row: {row_str}: {e}"))?
+        - 1;
 
     Ok((column, row))
 }
@@ -34,7 +35,7 @@ pub fn coords_to_string(col: usize, row: usize) -> String {
         col_str.insert(0, (b'A' + (n % 26) as u8) as char);
         n /= 26;
     }
-    format!("{col_str}{row}")
+    format!("{col_str}{}", row + 1)
 }
 
 /// An unordered set of unique elements. This is necessary because `HashSet` does not implement `Hash`.
@@ -108,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_parse_coords_and_coords_to_string() {
-        let pairs = vec![("A0", (0, 0)), ("AA7", (26, 7)), ("AB1", (27, 1))];
+        let pairs = vec![("A1", (0, 0)), ("AA7", (26, 6)), ("AB1", (27, 0))];
 
         for (coords, expected) in pairs {
             assert_eq!(parse_coords(coords).unwrap(), expected);

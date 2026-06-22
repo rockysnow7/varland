@@ -8,17 +8,17 @@ const state = {
 };
 
 async function getRawState() {
-    const res = await fetch(`${API}/api/get-raw-state`);
+    const res = await fetch(`${API}/api/get/raw-state`);
     return res.json();
 }
 
 async function getEvaluatedState() {
-    const res = await fetch(`${API}/api/get-evaluated-state`);
+    const res = await fetch(`${API}/api/get/evaluated-state`);
     return res.json();
 }
 
 async function setRawValue(col, row, value) {
-    const res = await fetch(`${API}/api/set-raw-value`, {
+    const res = await fetch(`${API}/api/set/raw-value`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ col, row, value }),
@@ -30,11 +30,13 @@ function cellKey(col, row) {
     return `${col},${row}`;
 }
 
-function parseInput(text) {
-    if (text.trim() === "") return "Null";
-    if (/^-?\d+$/.test(text)) return { Int: parseInt(text, 10) };
-    if (/^-?\d+\.\d+$/.test(text)) return { Float: parseFloat(text) };
-    return { String: text };
+async function parseInput(text) {
+    const res = await fetch(`${API}/api/parse`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(text),
+    });
+    return res.json();
 }
 
 function colLabel(i) {
@@ -61,7 +63,7 @@ function valueToString(value) {
     if ("Bool" in value) return String(value.Bool);
     if ("Int" in value) return String(value.Int);
     if ("Float" in value) return String(value.Float);
-    if ("String" in value) return value.String;
+    if ("String" in value) return `"${value.String}"`;
     if ("List" in value) {
         return `[${value.List.map(valueToString).join(", ")}]`;
     }
@@ -71,11 +73,11 @@ function valueToString(value) {
     }
     if ("CloneCell" in value) {
         const { col, row } = value.CloneCell;
-        return `${colLabel(col)}${row}`;
+        return `${colLabel(col)}${row + 1}`;
     }
     if ("CloneCellRange" in value) {
         const { start_col, start_row, end_col, end_row } = value.CloneCellRange;
-        return `${colLabel(start_col)}${start_row}:${colLabel(end_col)}${end_row}`;
+        return `${colLabel(start_col)}${start_row + 1}:${colLabel(end_col)}${end_row + 1}`;
     }
     return "";
 }
@@ -168,9 +170,17 @@ async function commitFormulaBar() {
     if (!input) return;
 
     const { col, row } = state.selected;
-    const value = parseInput(input.value);
     const key = cellKey(col, row);
-    const ok = await setRawValue(col, row, value);
+    const result = await parseInput(input.value);
+
+    if ("Err" in result) {
+        state.errors.set(key, result.Err);
+        render();
+        attachHandlers();
+        return;
+    }
+
+    const ok = await setRawValue(col, row, result.Ok);
     if (!ok) {
         state.errors.set(key, "Failed to set value");
     } else {

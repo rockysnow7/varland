@@ -9,7 +9,10 @@ use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
 use tower_http::{cors::CorsLayer, services::ServeDir};
-use varland::environment::{Environment, Value};
+use varland::{
+    environment::{Environment, Value},
+    parser,
+};
 
 type SharedEnvironment = Arc<Mutex<Environment>>;
 
@@ -52,14 +55,24 @@ async fn set_raw_value(
     StatusCode::CREATED
 }
 
+#[debug_handler]
+async fn parse(Json(request): Json<String>) -> Json<Result<Value, String>> {
+    match parser::parse(&request) {
+        Ok(("", value)) => Json(Ok(value)),
+        Ok((rest, _)) => Json(Err(format!("Unexpected trailing characters: {rest}"))),
+        Err(e) => Json(Err(format!("Failed to parse: {e}"))),
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let environment = Arc::new(Mutex::new(Environment::new()));
 
     let api_router = Router::new()
-        .route("/get-raw-state", get(get_raw_state))
-        .route("/get-evaluated-state", get(get_evaluated_state))
-        .route("/set-raw-value", post(set_raw_value));
+        .route("/get/raw-state", get(get_raw_state))
+        .route("/get/evaluated-state", get(get_evaluated_state))
+        .route("/set/raw-value", post(set_raw_value))
+        .route("/parse", post(parse));
     let app = Router::new()
         .nest("/api", api_router)
         .fallback_service(ServeDir::new("client"))
