@@ -22,8 +22,9 @@ impl Function {
         {
             if !argument.type_().is_subset_of(argument_type) {
                 return Err(format!(
-                    "Function `{}` expects argument {i} to be of type `{}`, but got a `{}` instead",
+                    "Function `{}` expects argument {} to be of type `{}`, but got a `{}` instead",
                     self.name,
+                    i + 1,
                     argument_type,
                     argument.type_()
                 ));
