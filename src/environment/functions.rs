@@ -83,7 +83,7 @@ pub fn builtin_functions() -> HashMap<String, Function> {
                     })
                     .collect::<Vec<f64>>();
 
-                let min = *values.iter().min_by(|a, b| f64::total_cmp(a, b)).unwrap();
+                let min = *values.iter().min_by(|a, b| f64::total_cmp(a, b)).ok_or("Internal error in `min` function")?;
                 let result = if min.fract() == 0.0 {
                     Value::Int(min as i64)
                 } else {
@@ -111,7 +111,7 @@ pub fn builtin_functions() -> HashMap<String, Function> {
                     })
                     .collect::<Vec<f64>>();
 
-                let max = *values.iter().max_by(|a, b| f64::total_cmp(a, b)).unwrap();
+                let max = *values.iter().max_by(|a, b| f64::total_cmp(a, b)).ok_or("Internal error in `max` function")?;
                 let result = if max.fract() == 0.0 {
                     Value::Int(max as i64)
                 } else {

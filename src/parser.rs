@@ -28,7 +28,7 @@ fn parse_int(input: &str) -> IResult<&str, Value> {
             None => true,
             _ => unreachable!(),
         };
-        let mut value = value.parse::<i64>().unwrap();
+        let mut value = value.parse::<i64>().unwrap(); // TODO: this could error
         if !positive {
             value = -value;
         }
@@ -51,7 +51,7 @@ fn parse_float(input: &str) -> IResult<&str, Value> {
             None => true,
             _ => unreachable!(),
         };
-        let mut value = format!("{integer}.{decimal}").parse::<f64>().unwrap();
+        let mut value = format!("{integer}.{decimal}").parse::<f64>().unwrap(); // TODO: this could error
         if !positive {
             value = -value;
         }
@@ -98,7 +98,7 @@ fn parse_function_call(input: &str) -> IResult<&str, Value> {
 
 fn parse_usize_1_or_more(input: &str) -> IResult<&str, usize> {
     (one_of("123456789"), digit0).parse(input).map(|(rest, (a, b))| {
-        let value = format!("{a}{b}").parse::<usize>().unwrap();
+        let value = format!("{a}{b}").parse::<usize>().unwrap(); // TODO: this could error
 
         (rest, value)
     })

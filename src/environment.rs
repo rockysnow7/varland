@@ -308,7 +308,11 @@ impl Environment {
             .iter()
             .map(|arg| self.evaluate_raw_value(arg, source_col, source_row))
             .collect::<Result<Vec<Value>, String>>()?;
-        let function = self.functions.get(function_name).unwrap();
+        let function = if let Some(function) = self.functions.get(function_name) {
+            function
+        } else {
+            return Err(format!("Function `{function_name}` not found"));
+        };
         function.call(&arguments_evaluated)
     }
 
