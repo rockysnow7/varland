@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 pub struct Function {
     name: String,
+    description: String,
     argument_types: Vec<ValueType>,
     function: fn(&[Value]) -> Result<Value, String>,
 }
@@ -42,9 +43,10 @@ pub fn builtin_functions() -> HashMap<String, Function> {
         "sum".to_string(),
         Function {
             name: "sum".to_string(),
+            description: "Takes a list of numbers and returns the sum of the numbers".to_string(),
             argument_types: vec![ValueType::list_of(ValueType::Int | ValueType::Float)],
-            function: |values| {
-                let Value::List(values) = &values[0] else {
+            function: |args| {
+                let Value::List(values) = &args[0] else {
                     unreachable!()
                 };
                 let sum = values
@@ -70,9 +72,10 @@ pub fn builtin_functions() -> HashMap<String, Function> {
         "min".to_string(),
         Function {
             name: "min".to_string(),
+            description: "Takes a list of numbers and returns the smallest number".to_string(),
             argument_types: vec![ValueType::list_of(ValueType::Int | ValueType::Float)],
-            function: |values| {
-                let Value::List(values) = &values[0] else {
+            function: |args| {
+                let Value::List(values) = &args[0] else {
                     unreachable!()
                 };
                 let values = values
@@ -99,9 +102,10 @@ pub fn builtin_functions() -> HashMap<String, Function> {
         "max".to_string(),
         Function {
             name: "max".to_string(),
+            description: "Takes a list of numbers and returns the largest number".to_string(),
             argument_types: vec![ValueType::list_of(ValueType::Int | ValueType::Float)],
-            function: |values| {
-                let Value::List(values) = &values[0] else {
+            function: |args| {
+                let Value::List(values) = &args[0] else {
                     unreachable!()
                 };
                 let values = values
@@ -128,9 +132,10 @@ pub fn builtin_functions() -> HashMap<String, Function> {
         "mean".to_string(),
         Function {
             name: "mean".to_string(),
+            description: "Takes a list of numbers and returns the mean of the numbers".to_string(),
             argument_types: vec![ValueType::list_of(ValueType::Int | ValueType::Float)],
-            function: |values| {
-                let Value::List(values) = &values[0] else {
+            function: |args| {
+                let Value::List(values) = &args[0] else {
                     unreachable!()
                 };
                 let values = values
@@ -154,36 +159,44 @@ pub fn builtin_functions() -> HashMap<String, Function> {
     );
 
     functions.insert(
-        "count".to_string(),
+        "len".to_string(),
         Function {
-            name: "count".to_string(),
-            argument_types: vec![ValueType::list_of(
-                ValueType::Bool | ValueType::Int | ValueType::Float | ValueType::String,
-            )],
-            function: |values| {
-                let Value::List(values) = &values[0] else {
-                    unreachable!()
-                };
-                let count = values.len();
-                Ok(Value::Int(count as i64))
+            name: "len".to_string(),
+            description: "Takes a list or string and returns its length".to_string(),
+            argument_types: vec![ValueType::list_of(ValueType::Any) | ValueType::String],
+            function: |args| {
+                match &args[0] {
+                    Value::List(values) => Ok(Value::Int(values.len() as i64)),
+                    Value::String(value) => Ok(Value::Int(value.len() as i64)),
+                    _ => unreachable!(),
+                }
             },
         },
     );
 
     functions.insert(
-        "concat".to_string(),
+        "join".to_string(),
         Function {
-            name: "concat".to_string(),
-            argument_types: vec![ValueType::list_of(ValueType::String)],
-            function: |values| {
-                let Value::List(values) = &values[0] else {
-                    unreachable!()
-                };
-                let result = values.iter().map(|v| match v {
-                    Value::String(value) => value.clone(),
-                    _ => unreachable!(),
-                }).collect::<String>();
-                Ok(Value::String(result))
+            name: "join".to_string(),
+            description: "Takes either a list of lists and joins them into a single list, or a list of strings and joins them into a single string".to_string(),
+            argument_types: vec![ValueType::list_of(ValueType::list_of(ValueType::Any)) | ValueType::list_of(ValueType::String)],
+            function: |args| {
+                if args[0].type_().is_subset_of(&ValueType::list_of(ValueType::list_of(ValueType::Any))) {
+                    let Value::List(lists) = &args[0] else { unreachable!() };
+                    let mut result = Vec::new();
+                    for list in lists {
+                        let Value::List(values) = list else { unreachable!() };
+                        result.extend(values.iter().cloned());
+                    }
+                    Ok(Value::List(result))
+                } else {
+                    let Value::List(strings) = &args[0] else { unreachable!() };
+                    let result = strings.iter().map(|s| match s {
+                        Value::String(value) => value.clone(),
+                        _ => unreachable!(),
+                    }).collect::<String>();
+                    Ok(Value::String(result))
+                }
             },
         },
     );

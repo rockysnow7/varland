@@ -10,6 +10,7 @@ use std::{collections::HashMap, error::Error, fmt::Display, ops::BitOr};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueType {
+    Any,
     Null,
     Bool,
     Int,
@@ -22,12 +23,16 @@ pub enum ValueType {
 impl ValueType {
     /// Returns true if `self` is an improper subset of `other`.
     pub fn is_subset_of(&self, other: &Self) -> bool {
+        if other == &Self::Any {
+            return true;
+        }
         if self == other {
             return true;
         }
 
         match (self, other) {
             (Self::Union(types), Self::Union(other_types)) => types.is_subset_of(other_types),
+            (Self::Union(types), other) => types.iter().all(|t| t.is_subset_of(other)),
             (_, Self::Union(other_types)) => other_types.iter().any(|t| self.is_subset_of(t)),
             (Self::List(Some(inner)), Self::List(Some(other_inner))) => {
                 inner.is_subset_of(other_inner)
@@ -80,6 +85,7 @@ impl BitOr for ValueType {
 impl Display for ValueType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Any => write!(f, "Any"),
             Self::Null => write!(f, "Null"),
             Self::Bool => write!(f, "Bool"),
             Self::Int => write!(f, "Int"),
@@ -461,6 +467,11 @@ mod tests {
         assert!(
             (ValueType::Int | ValueType::Float)
                 .is_subset_of(&(ValueType::Int | ValueType::Float | ValueType::String))
+        );
+        assert!(
+            (ValueType::list_of(ValueType::list_of(ValueType::Int) | ValueType::List(None))).is_subset_of(
+                &(ValueType::list_of(ValueType::list_of(ValueType::Any)) | ValueType::list_of(ValueType::String))
+            )
         );
     }
 }
