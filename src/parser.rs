@@ -42,7 +42,7 @@ fn parse_float(input: &str) -> IResult<&str, Value> {
         separated_pair(
             digit0,
             tag("."),
-            digit0,
+            digit1,
         ),
     ).parse(input).map(|(rest, (sign, (integer, decimal)))| {
         let positive = match sign {
