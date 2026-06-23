@@ -57,7 +57,7 @@ function isErrorCell(cell) {
     return cell != null && typeof cell === "object" && "Err" in cell;
 }
 
-function valueToString(value) {
+function valueToString(value, inner = false) {
     if (value == null || value === "Null") return "";
     if (typeof value !== "object") return String(value);
     if ("Bool" in value) return String(value.Bool);
@@ -65,19 +65,22 @@ function valueToString(value) {
     if ("Float" in value) return String(value.Float);
     if ("String" in value) return `"${value.String}"`;
     if ("List" in value) {
-        return `[${value.List.map(valueToString).join(", ")}]`;
+        return `[${value.List.map(v => valueToString(v, true)).join(", ")}]`;
     }
     if ("FunctionCall" in value) {
         const { function_name, arguments: args } = value.FunctionCall;
-        return `${function_name}(${args.map(valueToString).join(", ")})`;
+        const eq = inner ? "" : "=";
+        return `${eq}${function_name}(${args.map(v => valueToString(v, true)).join(", ")})`;
     }
     if ("CloneCell" in value) {
         const { col, row } = value.CloneCell;
-        return `${colLabel(col)}${row + 1}`;
+        const eq = inner ? "" : "=";
+        return `${eq}${colLabel(col)}${row + 1}`;
     }
     if ("CloneCellRange" in value) {
         const { start_col, start_row, end_col, end_row } = value.CloneCellRange;
-        return `${colLabel(start_col)}${start_row + 1}:${colLabel(end_col)}${end_row + 1}`;
+        const eq = inner ? "" : "=";
+        return `${eq}${colLabel(start_col)}${start_row + 1}:${colLabel(end_col)}${end_row + 1}`;
     }
     return "";
 }

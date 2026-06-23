@@ -1,4 +1,4 @@
 /target
-test.csv
+*.csv
 /client/.venv
 client/client.py

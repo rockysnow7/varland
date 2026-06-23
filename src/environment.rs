@@ -1,6 +1,9 @@
 mod functions;
 
-use crate::utils::{Set, coords_to_string};
+use crate::{
+    parser::parse,
+    utils::{Set, coords_to_string},
+};
 use functions::{Function, builtin_functions};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt::Display, ops::BitOr};
@@ -156,6 +159,13 @@ impl Value {
             }
         }
     }
+
+    pub fn infer_from_str(s: &str) -> Self {
+        match parse(s) {
+            Ok(("", value)) => value,
+            _ => Value::String(s.to_string()),
+        }
+    }
 }
 
 impl Display for Value {
@@ -214,6 +224,37 @@ impl Environment {
             raw_table: Vec::new(),
             evaluated_table: Vec::new(),
         }
+    }
+
+    pub fn new_from_csv(path_to_file: &str) -> Result<Self, csv::Error> {
+        let mut reader = csv::ReaderBuilder::new().has_headers(false).from_path(path_to_file)?;
+
+        let records = reader.records().collect::<Result<Vec<csv::StringRecord>, csv::Error>>()?;
+
+        let num_cols = records
+            .iter()
+            .map(|record| record.len())
+            .max()
+            .unwrap();
+        let num_rows = records.len();
+
+        let mut table = vec![vec![Value::Null; num_rows]; num_cols];
+        let headers = records.iter().next().unwrap();
+        for (col, header) in headers.iter().enumerate() {
+            table[col][0] = Value::String(header.to_string());
+        }
+
+        for (row, record) in records.iter().enumerate().skip(1) {
+            for (col, value) in record.iter().enumerate() {
+                let value = Value::infer_from_str(value);
+                table[col][row] = value;
+            }
+        }
+
+        let mut environment = Self::new();
+        environment.raw_table = table;
+
+        Ok(environment)
     }
 
     pub fn get_value_raw(&self, col: usize, row: usize) -> Value {

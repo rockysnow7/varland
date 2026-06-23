@@ -4,10 +4,10 @@ use nom::{
     Parser,
     branch::alt,
     bytes::complete::{tag, tag_no_case},
-    character::complete::{alpha1, char, digit0, digit1, satisfy, space0, one_of},
+    character::complete::{alpha1, char, digit0, digit1, one_of, satisfy, space0},
     combinator::{opt, value},
     multi::{many0, many1, separated_list0},
-    sequence::{delimited, separated_pair},
+    sequence::{delimited, preceded, separated_pair},
 };
 
 fn parse_bool(input: &str) -> IResult<&str, Value> {
@@ -73,7 +73,7 @@ fn parse_list(input: &str) -> IResult<&str, Value> {
         char('['),
         separated_list0(
             char(','),
-            delimited(space0, parse, space0),
+            delimited(space0, parse_inner, space0),
         ),
         char(']'),
     ).parse(input).map(|(rest, values)| (rest, Value::List(values)))
@@ -90,7 +90,7 @@ fn parse_function_call(input: &str) -> IResult<&str, Value> {
         delimited(space0, parse_name, space0),
         delimited(
             char('('),
-            separated_list0(char(','), delimited(space0, parse, space0)),
+            separated_list0(char(','), delimited(space0, parse_inner, space0)),
             char(')'),
         ),
     ).parse(input).map(|(rest, (function_name, arguments))| (rest, Value::FunctionCall { function_name, arguments }))
@@ -131,7 +131,7 @@ fn parse_clone_cell_range(input: &str) -> IResult<&str, Value> {
         })
 }
 
-pub fn parse(input: &str) -> IResult<&str, Value> {
+fn parse_inner(input: &str) -> IResult<&str, Value> {
     alt((
         parse_function_call,
         parse_clone_cell_range,
@@ -144,27 +144,64 @@ pub fn parse(input: &str) -> IResult<&str, Value> {
     )).parse(input)
 }
 
+pub fn parse(input: &str) -> IResult<&str, Value> {
+    if input.trim().is_empty() {
+        return Ok(("", Value::Null));
+    }
+
+    alt((
+        preceded(
+            char('='),
+            alt((
+                parse_function_call,
+                parse_clone_cell_range,
+                parse_clone_cell,
+            )),
+        ),
+        parse_list,
+        parse_float,
+        parse_int,
+        parse_bool,
+        parse_string,
+    )).parse(input)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_null() {
+        assert_eq!(parse(""), Ok(("", Value::Null)));
+        assert_eq!(parse(" \t\n"), Ok(("", Value::Null)));
+    }
     
     #[test]
     fn test_parse_function_call() {
-        assert_eq!(parse("sum(1, 2, 3)"), Ok(("", Value::FunctionCall { function_name: "sum".to_string(), arguments: vec![Value::Int(1), Value::Int(2), Value::Int(3)] })));
-        assert_eq!(parse("a1_()"), Ok(("", Value::FunctionCall { function_name: "a1_".to_string(), arguments: vec![] })));
+        assert_eq!(parse("=sum(1, 2, 3)"), Ok(("", Value::FunctionCall { function_name: "sum".to_string(), arguments: vec![Value::Int(1), Value::Int(2), Value::Int(3)] })));
+        assert_eq!(parse("=a1_()"), Ok(("", Value::FunctionCall { function_name: "a1_".to_string(), arguments: vec![] })));
+        assert_eq!(parse("=sum(a1:b2)"), Ok(("", Value::FunctionCall {
+            function_name: "sum".to_string(),
+            arguments: vec![Value::CloneCellRange {
+                start_col: 0,
+                start_row: 0,
+                end_col: 1,
+                end_row: 1,
+            }],
+        })));
     }
 
     #[test]
     fn test_parse_clone_cell_range() {
-        assert_eq!(parse("A1:B2"), Ok(("", Value::CloneCellRange { start_col: 0, start_row: 0, end_col: 1, end_row: 1 })));
-        assert_eq!(parse("aA1:Bz2"), Ok(("", Value::CloneCellRange { start_col: 26, start_row: 0, end_col: 77, end_row: 1 })));
+        assert_eq!(parse("=A1:B2"), Ok(("", Value::CloneCellRange { start_col: 0, start_row: 0, end_col: 1, end_row: 1 })));
+        assert_eq!(parse("=aA1:Bz2"), Ok(("", Value::CloneCellRange { start_col: 26, start_row: 0, end_col: 77, end_row: 1 })));
     }
 
     #[test]
     fn test_parse_clone_cell() {
-        assert_eq!(parse("A1"), Ok(("", Value::CloneCell { col: 0, row: 0 })));
-        assert_eq!(parse("z1"), Ok(("", Value::CloneCell { col: 25, row: 0 })));
-        assert_eq!(parse("AA10"), Ok(("", Value::CloneCell { col: 26, row: 9 })));
+        assert_eq!(parse("=A1"), Ok(("", Value::CloneCell { col: 0, row: 0 })));
+        assert_eq!(parse("=z1"), Ok(("", Value::CloneCell { col: 25, row: 0 })));
+        assert_eq!(parse("=AA10"), Ok(("", Value::CloneCell { col: 26, row: 9 })));
     }
     
     #[test]
