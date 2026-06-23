@@ -61,6 +61,10 @@ fn parse_float(input: &str) -> IResult<&str, Value> {
 }
 
 fn parse_string(input: &str) -> IResult<&str, Value> {
+    Ok(("", Value::String(input.to_string())))
+}
+
+fn parse_quoted_string(input: &str) -> IResult<&str, Value> {
     delimited(
         char('"'),
         many0(satisfy(|c| c != '"')),
@@ -140,12 +144,12 @@ fn parse_inner(input: &str) -> IResult<&str, Value> {
         parse_float,
         parse_int,
         parse_bool,
-        parse_string,
+        parse_quoted_string,
     )).parse(input)
 }
 
 pub fn parse(input: &str) -> IResult<&str, Value> {
-    if input.trim().is_empty() {
+    if input.is_empty() {
         return Ok(("", Value::Null));
     }
 
@@ -173,7 +177,6 @@ mod tests {
     #[test]
     fn test_parse_null() {
         assert_eq!(parse(""), Ok(("", Value::Null)));
-        assert_eq!(parse(" \t\n"), Ok(("", Value::Null)));
     }
     
     #[test]
@@ -207,6 +210,7 @@ mod tests {
     #[test]
     fn test_parse_list() {
         assert_eq!(parse("[ 1, 2, 3]"), Ok(("", Value::List(vec![Value::Int(1), Value::Int(2), Value::Int(3)]))));
+        assert_eq!(parse("[\"hey\"]"), Ok(("", Value::List(vec![Value::String("hey".to_string())]))));
         assert_eq!(
             parse("[1.0, \"hello\", [1]]"),
             Ok(("", Value::List(vec![Value::Float(1.0), Value::String("hello".to_string()), Value::List(vec![Value::Int(1)])]))),
@@ -236,6 +240,6 @@ mod tests {
 
     #[test]
     fn test_parse_string() {
-        assert_eq!(parse("\"Hello, world!\""), Ok(("", Value::String("Hello, world!".to_string()))));
+        assert_eq!(parse("Hello, world!"), Ok(("", Value::String("Hello, world!".to_string()))));
     }
 }

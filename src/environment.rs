@@ -175,7 +175,7 @@ impl Display for Value {
             Self::Bool(bool) => write!(f, "{bool}"),
             Self::Int(int) => write!(f, "{int}"),
             Self::Float(float) => write!(f, "{float}"),
-            Self::String(string) => write!(f, "{string}"),
+            Self::String(string) => write!(f, "\"{string}\""),
             Self::List(values) => {
                 let values_str = values
                     .iter()

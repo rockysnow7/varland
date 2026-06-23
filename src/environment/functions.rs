@@ -65,6 +65,7 @@ pub fn builtin_functions() -> HashMap<String, Function> {
             },
         },
     );
+
     functions.insert(
         "min".to_string(),
         Function {
@@ -93,6 +94,7 @@ pub fn builtin_functions() -> HashMap<String, Function> {
             },
         },
     );
+
     functions.insert(
         "max".to_string(),
         Function {
@@ -121,6 +123,7 @@ pub fn builtin_functions() -> HashMap<String, Function> {
             },
         },
     );
+
     functions.insert(
         "mean".to_string(),
         Function {
@@ -149,6 +152,7 @@ pub fn builtin_functions() -> HashMap<String, Function> {
             },
         },
     );
+
     functions.insert(
         "count".to_string(),
         Function {
@@ -162,6 +166,24 @@ pub fn builtin_functions() -> HashMap<String, Function> {
                 };
                 let count = values.len();
                 Ok(Value::Int(count as i64))
+            },
+        },
+    );
+
+    functions.insert(
+        "concat".to_string(),
+        Function {
+            name: "concat".to_string(),
+            argument_types: vec![ValueType::list_of(ValueType::String)],
+            function: |values| {
+                let Value::List(values) = &values[0] else {
+                    unreachable!()
+                };
+                let result = values.iter().map(|v| match v {
+                    Value::String(value) => value.clone(),
+                    _ => unreachable!(),
+                }).collect::<String>();
+                Ok(Value::String(result))
             },
         },
     );

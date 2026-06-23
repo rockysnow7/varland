@@ -63,7 +63,10 @@ function valueToString(value, inner = false) {
     if ("Bool" in value) return String(value.Bool);
     if ("Int" in value) return String(value.Int);
     if ("Float" in value) return String(value.Float);
-    if ("String" in value) return `"${value.String}"`;
+    if ("String" in value) {
+        if (inner) return `"${value.String}"`;
+        return value.String;
+    }
     if ("List" in value) {
         return `[${value.List.map(v => valueToString(v, true)).join(", ")}]`;
     }

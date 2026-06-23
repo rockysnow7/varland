@@ -11,3 +11,8 @@ nom = "8.0.0"
 serde = { version = "1.0.228", features = ["derive"] }
 tokio = { version = "1.52.3", features = ["full"] }
 tower-http = { version = "0.7.0", features = ["cors", "fs"] }
+
+[profile.dev]
+lto = true
+codegen-units = 1
+panic = "abort"

@@ -66,8 +66,8 @@ async fn parse(Json(request): Json<String>) -> Json<Result<Value, String>> {
 
 #[tokio::main]
 async fn main() {
-    let environment = Environment::new_from_csv("2024plays-short.csv").unwrap();
-    // let environment = Environment::new();
+    // let environment = Environment::new_from_csv("2024plays-short.csv").unwrap();
+    let environment = Environment::new();
     let environment = Arc::new(Mutex::new(environment));
 
     let api_router = Router::new()
