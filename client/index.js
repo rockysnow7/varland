@@ -419,6 +419,7 @@ document.addEventListener("keydown", async (e) => {
         case "Enter":
             e.preventDefault();
             formulaBar.focus();
+            setTimeout(() => { formulaBar.selectionStart = formulaBar.selectionEnd = 10000; }, 0);
             break;
         case "ArrowUp":
             e.preventDefault();
