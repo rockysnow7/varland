@@ -443,6 +443,9 @@ document.addEventListener("keydown", async (e) => {
     }
 
     if (isVisibleChar(e.key)) {
+        if (formulaBar.value !== "") {
+            formulaBar.value = "";
+        }
         formulaBar.focus();
     }
 });
