@@ -220,7 +220,7 @@ impl Display for Value {
 pub struct Environment {
     functions: HashMap<String, Function>,
     raw_table: Vec<Vec<Value>>,
-    evaluated_table: Vec<Vec<Result<Value, String>>>,
+    evaluated_table: Vec<Vec<Option<Result<Value, String>>>>, // (col, row) -> option<result> (None if not evaluated yet)
 }
 
 impl Environment {
@@ -232,6 +232,7 @@ impl Environment {
         }
     }
 
+    /// Loads an `Environment` from a CSV file.
     pub fn new_from_csv(path_to_file: &str) -> Result<Self, csv::Error> {
         let mut reader = csv::ReaderBuilder::new().has_headers(false).from_path(path_to_file)?;
 
@@ -263,48 +264,22 @@ impl Environment {
         Ok(environment)
     }
 
-    pub fn get_value_raw(&self, col: usize, row: usize) -> Value {
-        if col >= self.raw_table.len() {
-            return Value::Null;
-        }
-        if row >= self.raw_table[col].len() {
-            return Value::Null;
-        }
-        self.raw_table[col][row].clone()
+    /// Returns the number of columns in the environment.
+    pub fn num_cols(&self) -> usize {
+        self.raw_table.len()
     }
 
-    pub fn set_value_raw(&mut self, col: usize, row: usize, value: Value) {
-        if col >= self.raw_table.len() {
-            self.raw_table.resize(col + 1, Vec::new());
-        }
-        if row >= self.raw_table[col].len() {
-            self.raw_table[col].resize(row + 1, Value::Null);
-        }
-        self.raw_table[col][row] = value;
+    /// Returns the number of rows in the environment.
+    pub fn num_rows(&self) -> usize {
+        if self.raw_table.is_empty() { return 0; }
+
+        let max_rows = self.raw_table.iter().map(|row| row.len()).max().unwrap();
+        max_rows
     }
 
-    pub fn get_value_evaluated(&self, col: usize, row: usize) -> Result<Value, String> {
-        if col >= self.evaluated_table.len() {
-            return Ok(Value::Null);
-        }
-        if row >= self.evaluated_table[col].len() {
-            return Ok(Value::Null);
-        }
-        self.evaluated_table[col][row].clone()
-    }
-
-    fn set_value_evaluated(&mut self, col: usize, row: usize, value: Result<Value, String>) {
-        if col >= self.evaluated_table.len() {
-            self.evaluated_table.resize(col + 1, Vec::new());
-        }
-        if row >= self.evaluated_table[col].len() {
-            self.evaluated_table[col].resize(row + 1, Ok(Value::Null));
-        }
-        self.evaluated_table[col][row] = value;
-    }
-
+    /// Evaluates a function call.
     fn evaluate_function_call(
-        &self,
+        &mut self,
         function_name: &str,
         arguments: &[Value],
         source_col: usize,
@@ -312,7 +287,7 @@ impl Environment {
     ) -> Result<Value, String> {
         let arguments_evaluated = arguments
             .iter()
-            .map(|arg| self.evaluate_raw_value(arg, source_col, source_row))
+            .map(|arg| self.evaluate_value(arg, source_col, source_row))
             .collect::<Result<Vec<Value>, String>>()?;
         let function = if let Some(function) = self.functions.get(function_name) {
             function
@@ -322,8 +297,9 @@ impl Environment {
         function.call(&arguments_evaluated)
     }
 
-    fn evaluate_raw_value(
-        &self,
+    /// Evaluates a raw value.
+    fn evaluate_value(
+        &mut self,
         raw_value: &Value,
         source_col: usize,
         source_row: usize,
@@ -337,7 +313,7 @@ impl Environment {
             Value::List(value) => {
                 let values = value
                     .iter()
-                    .map(|v| self.evaluate_raw_value(v, source_col, source_row))
+                    .map(|v| self.evaluate_value(v, source_col, source_row))
                     .collect::<Result<Vec<Value>, String>>()?;
                 Ok(Value::List(values))
             }
@@ -353,7 +329,7 @@ impl Environment {
                         coords_to_string(source_col, source_row)
                     ))
                 } else {
-                    self.get_value_evaluated(*col, *row)
+                    self.get_evaluated(*col, *row)
                 }
             }
             Value::CloneCellRange {
@@ -384,7 +360,7 @@ impl Environment {
                 let mut values = Vec::new();
                 for col in *start_col..=*end_col {
                     for row in *start_row..=*end_row {
-                        let value = self.get_value_evaluated(col, row)?;
+                        let value = self.get_evaluated(col, row)?;
                         if value == Value::Null {
                             continue;
                         }
@@ -396,30 +372,109 @@ impl Environment {
         }
     }
 
-    fn evaluate_cell(&mut self, row: usize, column: usize) {
-        let raw_value = self.get_value_raw(row, column);
-        let evaluated_value = self.evaluate_raw_value(&raw_value, row, column);
-        self.set_value_evaluated(row, column, evaluated_value);
-    }
-
-    pub fn evaluate_all(&mut self) {
-        for row in 0..self.raw_table.len() {
-            for column in 0..self.raw_table[row].len() {
-                self.evaluate_cell(row, column);
+    /// Sets all cells in the evaluated table to None.
+    fn clear_evaluated_table(&mut self) {
+        for col in self.evaluated_table.iter_mut() {
+            for row in col.iter_mut() {
+                *row = None;
             }
         }
     }
 
-    pub fn get_raw_state(&self) -> Vec<Vec<Value>> {
-        self.raw_table.clone()
+    /// Gets the raw value in the given cell.
+    pub fn get_raw(&self, col: usize, row: usize) -> Value {
+        if col >= self.raw_table.len() {
+            return Value::Null;
+        }
+        if row >= self.raw_table[col].len() {
+            return Value::Null;
+        }
+        self.raw_table[col][row].clone()
     }
 
-    pub fn get_evaluated_state(&self) -> Vec<Vec<Result<Value, String>>> {
-        self.evaluated_table.clone()
+    /// Sets the raw value in the given cell.
+    pub fn set_raw(&mut self, col: usize, row: usize, value: Value) {
+        if col >= self.raw_table.len() {
+            self.raw_table.resize(col + 1, Vec::new());
+        }
+        if row >= self.raw_table[col].len() {
+            self.raw_table[col].resize(row + 1, Value::Null);
+        }
+        self.raw_table[col][row] = value;
+
+        if col < self.evaluated_table.len() && row < self.evaluated_table[col].len() {
+            self.evaluated_table[col][row] = None;
+        }
     }
 
-    pub fn to_csv(&mut self, path_to_file: &str) -> Result<(), Box<dyn Error>> {
-        self.evaluate_all();
+    /// Evaluates the raw value in the given cell and returns the result.
+    fn get_evaluated(&mut self, col: usize, row: usize) -> Result<Value, String> {
+        if col < self.evaluated_table.len()
+            && row < self.evaluated_table[col].len()
+            && let Some(value) = self.evaluated_table[col][row].clone()
+        {
+            return value;
+        }
+
+        self.evaluate_cell(col, row);
+        self.evaluated_table[col][row].clone().unwrap()
+    }
+
+    /// Evaluates the raw values in the given range and returns the results.
+    pub fn get_evaluated_range(&mut self, start_col: usize, start_row: usize, end_col: usize, end_row: usize) -> Vec<Vec<Result<Value, String>>> {
+        let num_cols = end_col - start_col + 1;
+        let num_rows = end_row - start_row + 1;
+        let mut results = vec![vec![Ok(Value::Null); num_rows]; num_cols];
+        for col in start_col..=end_col {
+            for row in start_row..=end_row {
+                results[col - start_col][row - start_row] = self.get_evaluated(col, row);
+            }
+        }
+
+        results
+    }
+
+    /// Sets the evaluated value in the given cell.
+    fn set_evaluated(&mut self, col: usize, row: usize, value: Result<Value, String>) {
+        if col >= self.evaluated_table.len() {
+            self.evaluated_table.resize(col + 1, Vec::new());
+        }
+        if row >= self.evaluated_table[col].len() {
+            self.evaluated_table[col].resize(row + 1, None);
+        }
+        self.evaluated_table[col][row] = Some(value);
+    }
+
+    /// Evaluates the raw value in the given cell and sets the result in the evaluated table.
+    fn evaluate_cell(&mut self, col: usize, row: usize) {
+        let raw_value = self.get_raw(col, row);
+        let evaluated_value = self.evaluate_value(&raw_value, col, row);
+        self.set_evaluated(col, row, evaluated_value);
+    }
+
+    /// Evaluates all cells in the range.
+    pub fn evaluate_range(&mut self, start_col: usize, start_row: usize, end_col: usize, end_row: usize) {
+        self.clear_evaluated_table();
+        for col in start_col..=end_col {
+            for row in start_row..=end_row {
+                self.evaluate_cell(row, col);
+            }
+        }
+    }
+
+    /// Evaluates all cells in the environment.
+    pub fn evaluate_all_cells(&mut self) {
+        self.clear_evaluated_table();
+        for col in 0..self.raw_table.len() {
+            for row in 0..self.raw_table[col].len() {
+                self.evaluate_cell(col, row);
+            }
+        }
+    }
+
+    /// Saves the environment to a CSV file.
+    pub fn save_to_csv(&mut self, path_to_file: &str) -> Result<(), Box<dyn Error>> {
+        self.evaluate_all_cells();
 
         let mut wtr = csv::Writer::from_path(path_to_file)?;
         if self.evaluated_table.is_empty() {
@@ -436,7 +491,7 @@ impl Environment {
         for row in 0..max_len {
             let mut row_values = Vec::new();
             for col in 0..self.evaluated_table.len() {
-                let value = self.get_value_evaluated(col, row);
+                let value = self.get_evaluated(col, row);
                 let value_str = match value {
                     Ok(value) => value.to_string(),
                     Err(error) => error,

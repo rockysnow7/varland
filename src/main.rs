@@ -16,23 +16,60 @@ use varland::{
 
 type SharedEnvironment = Arc<Mutex<Environment>>;
 
-#[debug_handler]
-async fn get_raw_state(
-    State(environment): State<SharedEnvironment>,
-) -> Json<Vec<Vec<Value>>> {
-    let raw_state = environment.lock().unwrap().get_raw_state();
+async fn get_num_cols(State(environment): State<SharedEnvironment>) -> Json<usize> {
+    let num_cols = environment.lock().unwrap().num_cols();
+    Json(num_cols)
+}
 
-    Json(raw_state)
+async fn get_num_rows(State(environment): State<SharedEnvironment>) -> Json<usize> {
+    let num_rows = environment.lock().unwrap().num_rows();
+    Json(num_rows)
+}
+
+#[derive(Deserialize)]
+struct GetRawRequest {
+    col: usize,
+    row: usize,
 }
 
 #[debug_handler]
-async fn get_evaluated_state(
+async fn get_raw(
     State(environment): State<SharedEnvironment>,
-) -> Json<Vec<Vec<Result<Value, String>>>> {
-    environment.lock().unwrap().evaluate_all();
-    let evaluated_state = environment.lock().unwrap().get_evaluated_state();
+    Json(request): Json<GetRawRequest>,
+) -> Json<Value> {
+    let raw_value = environment.lock().unwrap().get_raw(request.col, request.row);
 
-    Json(evaluated_state)
+    Json(raw_value)
+}
+
+#[derive(Deserialize)]
+struct GetEvaluatedRangeRequest {
+    start_col: usize,
+    start_row: usize,
+    end_col: usize,
+    end_row: usize,
+}
+
+#[debug_handler]
+async fn get_evaluated_range(
+    State(environment): State<SharedEnvironment>,
+    Json(request): Json<GetEvaluatedRangeRequest>,
+) -> Json<Vec<Vec<Result<Value, String>>>> {
+    environment
+        .lock()
+        .unwrap()
+        .evaluate_range(
+            request.start_col,
+            request.start_row,
+            request.end_col,
+            request.end_row,
+        );
+    let results = environment
+        .lock()
+        .unwrap()
+        .get_evaluated_range(request.start_col, request.start_row, request.end_col, request.end_row);
+
+    Json(results)
 }
 
 #[derive(Deserialize)]
@@ -43,14 +80,14 @@ struct SetRawValueRequest {
 }
 
 #[debug_handler]
-async fn set_raw_value(
+async fn set_raw(
     State(environment): State<SharedEnvironment>,
     Json(request): Json<SetRawValueRequest>,
 ) -> StatusCode {
     environment
         .lock()
         .unwrap()
-        .set_value_raw(request.col, request.row, request.value);
+        .set_raw(request.col, request.row, request.value);
 
     StatusCode::CREATED
 }
@@ -71,9 +108,11 @@ async fn main() {
     let environment = Arc::new(Mutex::new(environment));
 
     let api_router = Router::new()
-        .route("/get/raw-state", get(get_raw_state))
-        .route("/get/evaluated-state", get(get_evaluated_state))
-        .route("/set/raw-value", post(set_raw_value))
+        .route("/get/num-cols", get(get_num_cols))
+        .route("/get/num-rows", get(get_num_rows))
+        .route("/get/raw", post(get_raw))
+        .route("/get/evaluated-range", post(get_evaluated_range))
+        .route("/set/raw", post(set_raw))
         .route("/parse", post(parse));
     let app = Router::new()
         .nest("/api", api_router)
