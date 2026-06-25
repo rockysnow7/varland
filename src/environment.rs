@@ -314,6 +314,7 @@ impl Environment {
                 let values = value
                     .iter()
                     .map(|v| self.evaluate_value(v, source_col, source_row))
+                    .filter(|v| !matches!(v, Ok(Value::Null)))
                     .collect::<Result<Vec<Value>, String>>()?;
                 Ok(Value::List(values))
             }
